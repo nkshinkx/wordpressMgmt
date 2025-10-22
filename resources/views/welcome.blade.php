@@ -4,151 +4,179 @@
 
 @section('content')
 <style>
-    .hero-gradient {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        color: white;
-        border-radius: 15px;
-        box-shadow: 0 10px 30px rgba(0,0,0,0.2);
-    }
     .feature-card {
-        transition: transform 0.3s, box-shadow 0.3s;
-        border: none;
-        box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+        transition: transform 0.3s ease, box-shadow 0.3s ease;
+        border: 1px solid #e9ecef;
+        border-radius: 8px;
+        height: 100%;
     }
     .feature-card:hover {
-        transform: translateY(-10px);
-        box-shadow: 0 10px 30px rgba(0,0,0,0.15);
+        transform: translateY(-5px);
+        box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+        border-color: #667eea;
     }
-    .feature-icon {
-        font-size: 3rem;
-        margin-bottom: 1rem;
-    }
-    .stat-badge {
+    .section-title {
+        position: relative;
         display: inline-block;
-        padding: 8px 16px;
-        background: rgba(255,255,255,0.2);
+        padding-bottom: 10px;
+    }
+    .section-title::after {
+        content: '';
+        position: absolute;
+        bottom: 0;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 60px;
+        height: 3px;
+        background: #667eea;
+    }
+    .tech-badge {
+        display: inline-block;
+        padding: 6px 14px;
+        background: #f8f9fa;
+        border: 1px solid #dee2e6;
         border-radius: 20px;
-        margin: 5px;
+        margin: 4px;
+        font-size: 0.875rem;
+    }
+    .info-section {
+        background: #f8f9fa;
+        border-radius: 8px;
+        padding: 2.5rem;
     }
 </style>
 
+<div class="row mb-4">
+    <div class="col-12 text-center">
+        <h1 class="display-4 fw-bold mb-3">WordPress Management System</h1>
+        <p class="lead text-muted mb-4">
+            A Laravel-based centralized management system for managing multiple WordPress sites through the WordPress REST API.
+        </p>
+        @guest
+            <a href="{{ route('login') }}" class="btn btn-primary btn-lg px-4 py-2">Login</a>
+        @else
+            <a href="{{ route('dashboard') }}" class="btn btn-primary btn-lg px-4 py-2 me-2">Go to Dashboard</a>
+            <a href="{{ route('wordpress.sites.list') }}" class="btn btn-outline-primary btn-lg px-4 py-2">Manage Sites</a>
+        @endguest
+    </div>
+</div>
+
 <div class="row mb-5">
     <div class="col-12">
-        <div class="hero-gradient text-center p-5">
-            <div class="py-4">
-                <h1 class="display-3 fw-bold mb-3">WordPress Management System</h1>
-                <p class="lead mb-4 fs-4">
-                    Centralized platform to manage multiple WordPress sites, create content, and collaborate with your team
-                </p>
-                
-                @auth
-                    <div class="mb-4">
-                        <div class="stat-badge">
-                            <strong>{{ \App\Models\WpSites::count() }}</strong> Sites
-                        </div>
-                        <div class="stat-badge">
-                            <strong>{{ \App\Models\WpPost::count() }}</strong> Posts
-                        </div>
-                        <div class="stat-badge">
-                            <strong>{{ \App\Models\WpMedia::count() }}</strong> Media Files
-                        </div>
-                    </div>
-                @endauth
-                
-                <div class="mt-4">
-                    @guest
-                        <a href="{{ route('login') }}" class="btn btn-light btn-lg px-5 py-3 me-3">
-                            <strong>🔑 Login</strong>
-                        </a>
-                    @else
-                        <a href="{{ route('dashboard') }}" class="btn btn-light btn-lg px-5 py-3 me-3">
-                            <strong>📊 Go to Dashboard</strong>
-                        </a>
-                        <a href="{{ route('wordpress.sites.list') }}" class="btn btn-outline-light btn-lg px-5 py-3">
-                            <strong>🌐 Manage Sites</strong>
-                        </a>
-                    @endguest
-                </div>
+        <div class="info-section">
+            <h3 class="fw-bold mb-3">Overview</h3>
+            <p class="text-muted mb-0">
+                This project was created after discovering the powerful WordPress REST API capabilities. By leveraging the JWT Authentication plugin, 
+                this system provides a unified interface to manage content across multiple WordPress sites without needing to log into each one individually.
+            </p>
+        </div>
+    </div>
+</div>
+
+<div class="row mb-5">
+    <div class="col-12 text-center mb-4">
+        <h2 class="section-title fw-bold">Features</h2>
+    </div>
+</div>
+
+<div class="row g-4 mb-4">
+    <div class="col-md-6">
+        <div class="card feature-card">
+            <div class="card-body p-4">
+                <h5 class="card-title fw-bold mb-3">Site Management</h5>
+                <ul class="list-unstyled text-muted">
+                    <li class="mb-2">• Connect and manage multiple WordPress sites from one dashboard</li>
+                    <li class="mb-2">• Real-time connection status monitoring</li>
+                    <li class="mb-2">• JWT token auto-refresh mechanism</li>
+                    <li class="mb-2">• Test connection functionality to verify site accessibility</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-6">
+        <div class="card feature-card">
+            <div class="card-body p-4">
+                <h5 class="card-title fw-bold mb-3">Post Management</h5>
+                <ul class="list-unstyled text-muted">
+                    <li class="mb-2">• Create and edit posts locally before pushing to WordPress</li>
+                    <li class="mb-2">• Push posts to WordPress as drafts or publish directly</li>
+                    <li class="mb-2">• Schedule posts for future publishing</li>
+                    <li class="mb-2">• Sync existing posts from WordPress sites</li>
+                    <li class="mb-2">• Track post history and changes</li>
+                    <li class="mb-2">• Support for categories, tags, and featured images</li>
+                </ul>
             </div>
         </div>
     </div>
 </div>
 
-<div class="row mb-4">
-    <div class="col-12 text-center mb-4">
-        <h2 class="fw-bold">✨ Key Features</h2>
-        <p class="text-muted">Everything you need to manage your WordPress sites effectively</p>
+<div class="row g-4 mb-4">
+    <div class="col-md-6">
+        <div class="card feature-card">
+            <div class="card-body p-4">
+                <h5 class="card-title fw-bold mb-3">Media Management</h5>
+                <ul class="list-unstyled text-muted">
+                    <li class="mb-2">• Upload media files to WordPress sites</li>
+                    <li class="mb-2">• Sync existing media from WordPress</li>
+                    <li class="mb-2">• Media library browsing per site</li>
+                    <li class="mb-2">• Support for images, PDFs, and documents</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-6">
+        <div class="card feature-card">
+            <div class="card-body p-4">
+                <h5 class="card-title fw-bold mb-3">User Management</h5>
+                <ul class="list-unstyled text-muted">
+                    <li class="mb-2">• Role-based access control (Admin, Manager, User)</li>
+                    <li class="mb-2">• Admin: Full system access including user and site management</li>
+                    <li class="mb-2">• Manager: Can manage sites and posts</li>
+                    <li class="mb-2">• User: Can create and manage posts only</li>
+                </ul>
+            </div>
+        </div>
     </div>
 </div>
 
 <div class="row g-4 mb-5">
-    <div class="col-md-4 col-sm-6">
-        <div class="card feature-card h-100 text-center p-4">
-            <div class="card-body">
-                <div class="feature-icon">🌐</div>
-                <h5 class="card-title fw-bold">Multi-Site Management</h5>
-                <p class="card-text text-muted">Connect and manage multiple WordPress sites from a single dashboard. Monitor status and synchronize content effortlessly.</p>
-            </div>
-        </div>
-    </div>
-    
-    <div class="col-md-4 col-sm-6">
-        <div class="card feature-card h-100 text-center p-4">
-            <div class="card-body">
-                <div class="feature-icon">✍️</div>
-                <h5 class="card-title fw-bold">Content Creation</h5>
-                <p class="card-text text-muted">Create and edit posts with a user-friendly editor. Schedule publications and manage drafts all in one place.</p>
+    <div class="col-md-6">
+        <div class="card feature-card">
+            <div class="card-body p-4">
+                <h5 class="card-title fw-bold mb-3">Category & Tag Management</h5>
+                <ul class="list-unstyled text-muted">
+                    <li class="mb-2">• Sync categories and tags from WordPress sites</li>
+                    <li class="mb-2">• Create new categories and tags</li>
+                    <li class="mb-2">• Automatic synchronization support</li>
+                </ul>
             </div>
         </div>
     </div>
 
-    <div class="col-md-4 col-sm-6">
-        <div class="card feature-card h-100 text-center p-4">
-            <div class="card-body">
-                <div class="feature-icon">🖼️</div>
-                <h5 class="card-title fw-bold">Media Management</h5>
-                <p class="card-text text-muted">Upload and organize media files. Access your entire media library and use images across multiple sites.</p>
-            </div>
-        </div>
-    </div>
-    
-    <div class="col-md-4 col-sm-6">
-        <div class="card feature-card h-100 text-center p-4">
-            <div class="card-body">
-                <div class="feature-icon">🔐</div>
-                <h5 class="card-title fw-bold">Secure Authentication</h5>
-                <p class="card-text text-muted">Enterprise-grade security with password hashing, JWT tokens, and secure session management.</p>
-            </div>
-        </div>
-    </div>
-
-    <div class="col-md-4 col-sm-6">
-        <div class="card feature-card h-100 text-center p-4">
-            <div class="card-body">
-                <div class="feature-icon">👥</div>
-                <h5 class="card-title fw-bold">Role-Based Access</h5>
-                <p class="card-text text-muted">Three-tier role system (Admin, Manager, User) ensures proper access control and team collaboration.</p>
-            </div>
-        </div>
-    </div>
-
-    <div class="col-md-4 col-sm-6">
-        <div class="card feature-card h-100 text-center p-4">
-            <div class="card-body">
-                <div class="feature-icon">🔄</div>
-                <h5 class="card-title fw-bold">Auto Synchronization</h5>
-                <p class="card-text text-muted">Keep your content synchronized across all your WordPress sites with automatic token refresh.</p>
+    <div class="col-md-6">
+        <div class="card feature-card">
+            <div class="card-body p-4">
+                <h5 class="card-title fw-bold mb-3">Sync & History</h5>
+                <ul class="list-unstyled text-muted">
+                    <li class="mb-2">• Complete data synchronization (posts, media, categories, tags)</li>
+                    <li class="mb-2">• Post history tracking with user attribution</li>
+                    <li class="mb-2">• Last sync timestamp tracking</li>
+                    <li class="mb-2">• Error logging and reporting</li>
+                </ul>
             </div>
         </div>
     </div>
 </div>
+
 
 <div class="row mb-5">
     <div class="col-12">
         <div class="card bg-light border-0">
             <div class="card-body p-5 text-center">
-                <h3 class="fw-bold mb-3">🚀 Ready to streamline your WordPress management?</h3>
-                <p class="text-muted mb-4 fs-5">Join our platform and experience efficient multi-site WordPress management</p>
+                <h3 class="fw-bold mb-3">Ready to streamline your WordPress management?</h3>
+                <p class="text-muted mb-4">Experience efficient multi-site WordPress management from a single unified platform</p>
                 @guest
                     <a href="{{ route('login') }}" class="btn btn-primary btn-lg px-5 py-3">
                         <strong>Get Started Now</strong>
@@ -163,11 +191,17 @@
     </div>
 </div>
 
-<div class="row">
-    <div class="col-12 text-center">
-        <p class="text-muted">
-            <small>Powered by Laravel &amp; Bootstrap • Built for WordPress Professionals</small>
-        </p>
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card border-0 bg-light">
+            <div class="card-body p-4">
+                <p class="text-muted mb-0">
+                    <strong>Note:</strong> This is a learning project created to explore WordPress REST API capabilities. 
+                    Use in production environments at your own discretion and ensure proper security measures are in place.
+                </p>
+            </div>
+        </div>
     </div>
 </div>
 @endsection
+
