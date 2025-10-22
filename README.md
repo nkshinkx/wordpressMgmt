@@ -6,6 +6,8 @@ A Laravel-based centralized management system for managing multiple WordPress si
 
 This project was created after discovering the powerful WordPress REST API capabilities. By leveraging the JWT Authentication plugin, this system provides a unified interface to manage content across multiple WordPress sites without needing to log into each one individually.
 
+![Project Screenshot](public/assets/image.png)
+
 ## Features
 
 ### Site Management
