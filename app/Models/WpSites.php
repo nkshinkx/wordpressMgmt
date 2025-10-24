@@ -45,4 +45,14 @@ class WpSites extends Model
     {
         return $this->hasMany(WpMedia::class, 'wp_site_id');
     }
+
+    /**
+     * Get the latest published post's published_at timestamp for this site
+     */
+    public function getLastPublishedAtAttribute()
+    {
+        return $this->posts()
+            ->whereNotNull('published_at')
+            ->max('published_at');
+    }
 }

@@ -76,11 +76,36 @@
                                 <table class="table table-striped table-hover" id="postsTable">
                                     <thead class="table-light">
                                         <tr>
-                                            <th>ID</th>
-                                            <th>Title</th>
-                                            <th>Status</th>
-                                            <th>WP Status</th>
-                                            <th>Last Updated</th>
+                                            <th>
+                                                <a href="javascript:void(0)" onclick="sortBy('id')" class="text-decoration-none text-dark">
+                                                    ID
+                                                    <i id="sort_id" class="bx"></i>
+                                                </a>
+                                            </th>
+                                            <th>
+                                                <a href="javascript:void(0)" onclick="sortBy('title')" class="text-decoration-none text-dark">
+                                                    Title
+                                                    <i id="sort_title" class="bx"></i>
+                                                </a>
+                                            </th>
+                                            <th>
+                                                <a href="javascript:void(0)" onclick="sortBy('status')" class="text-decoration-none text-dark">
+                                                    Status
+                                                    <i id="sort_status" class="bx"></i>
+                                                </a>
+                                            </th>
+                                            <th>
+                                                <a href="javascript:void(0)" onclick="sortBy('wp_status')" class="text-decoration-none text-dark">
+                                                    WP Status
+                                                    <i id="sort_wp_status" class="bx"></i>
+                                                </a>
+                                            </th>
+                                            <th>
+                                                <a href="javascript:void(0)" onclick="sortBy('published_at')" class="text-decoration-none text-dark">
+                                                    Published At
+                                                    <i id="sort_published_at" class="bx bx-down-arrow"></i>
+                                                </a>
+                                            </th>
                                             <th>Last Synced</th>
                                             <th>Actions</th>
                                         </tr>
@@ -105,13 +130,41 @@
     </div>
 
     <script>
-        const siteId = {{ $siteId ?? 'null' }};
+
+        const siteId = {{ $wpSite->id ?? 0 }};
         let currentPage = 1;
-        const userAccess = {{ Auth::user()->role }};
+        let currentSortBy = 'published_at';
+        let currentSortOrder = 'desc';
+        const userAccess = "{{ Auth::user()->role }}";
         // Load posts on page load
         document.addEventListener('DOMContentLoaded', function() {
             loadPosts();
         });
+
+        // Sort by column
+        function sortBy(column) {
+            if (currentSortBy === column) {
+                currentSortOrder = currentSortOrder === 'asc' ? 'desc' : 'asc';
+            } else {
+                currentSortBy = column;
+                currentSortOrder = 'desc';
+            }
+            updateSortIcons();
+            loadPosts(1);
+        }
+
+        // Update sort icons
+        function updateSortIcons() {
+            ['id', 'title', 'status', 'wp_status', 'published_at'].forEach(col => {
+                const icon = document.getElementById('sort_' + col);
+                if (icon) {
+                    icon.className = 'bx';
+                    if (col === currentSortBy) {
+                        icon.className = currentSortOrder === 'asc' ? 'bx bx-up-arrow' : 'bx bx-down-arrow';
+                    }
+                }
+            });
+        }
 
         // Load posts from API
         function loadPosts(page = 1) {
@@ -121,6 +174,7 @@
             let url = `/api/wordpress-posts/${siteId}?page=${page}`;
             if (status) url += `&status=${status}`;
             if (search) url += `&search=${encodeURIComponent(search)}`;
+            url += `&sort_by=${currentSortBy}&sort_order=${currentSortOrder}`;
 
             fetch(url, {
                     headers: {
@@ -155,7 +209,7 @@
             postsData.data.forEach(post => {
                 const statusBadge = getStatusBadge(post.status);
                 const wpStatusBadge = getWpStatusBadge(post.wp_status);
-                const lastUpdated = new Date(post.updated_at).toLocaleString();
+                const publishedAt = post.published_at ? new Date(post.published_at).toLocaleString() : 'Not Published';
                 const lastSynced = post.last_synced_at ? new Date(post.last_synced_at).toLocaleString() : 'Never';
 
                 html += `
@@ -166,7 +220,7 @@
                     </td>
                     <td>${statusBadge}</td>
                     <td>${wpStatusBadge}</td>
-                    <td>${lastUpdated}</td>
+                    <td>${publishedAt}</td>
                     <td>${lastSynced}</td>
                     <td>
                         <div class="btn-group btn-group-sm" role="group">

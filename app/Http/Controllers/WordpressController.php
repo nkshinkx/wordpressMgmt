@@ -11,6 +11,7 @@ use App\Models\WpTag;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Http;
 use App\Services\WordpressPostService;
 
 
@@ -25,19 +26,56 @@ class WordpressController extends Controller
     public function getWordpressSites(Request $request)
     {
         $search = $request->input('search');
+        $sortBy = $request->input('sort_by', 'last_published_at'); // Default sort by last_published_at
+        $sortOrder = $request->input('sort_order', 'desc'); // Default desc (newest first)
 
-        $query = WpSites::select('id', 'site_name', 'domain', 'rest_path', 'status', 'last_connected_at');
+        // Validate sort column
+        $allowedSorts = ['id', 'site_name', 'domain', 'status', 'last_published_at'];
+        if (!in_array($sortBy, $allowedSorts)) {
+            $sortBy = 'last_published_at';
+        }
+
+        // Validate sort order
+        if (!in_array(strtolower($sortOrder), ['asc', 'desc'])) {
+            $sortOrder = 'desc';
+        }
+
+        $query = WpSites::select('wp_sites.*')
+            ->leftJoin('wp_posts', function($join) {
+                $join->on('wp_sites.id', '=', 'wp_posts.wp_site_id')
+                    ->whereNotNull('wp_posts.published_at');
+            })
+            ->groupBy('wp_sites.id', 'wp_sites.site_name', 'wp_sites.domain', 'wp_sites.rest_path', 
+                     'wp_sites.username', 'wp_sites.password', 'wp_sites.jwt_token', 'wp_sites.jwt_expires_at',
+                     'wp_sites.status', 'wp_sites.connection_error', 'wp_sites.last_connected_at', 
+                     'wp_sites.auto_refresh', 'wp_sites.created_at', 'wp_sites.updated_at')
+            ->selectRaw('MAX(wp_posts.published_at) as last_published_at');
 
         if (!empty($search)) {
             $query->where(function ($q) use ($search) {
-                $q->where('site_name', 'LIKE', '%' . $search . '%')
-                    ->orWhere('domain', 'LIKE', '%' . $search . '%');
+                $q->where('wp_sites.site_name', 'LIKE', '%' . $search . '%')
+                    ->orWhere('wp_sites.domain', 'LIKE', '%' . $search . '%');
             });
         }
 
-        $wordpressSites = $query->paginate(20)->appends(['search' => $search]);
+        // Apply sorting
+        if ($sortBy === 'last_published_at') {
+            $query->orderByRaw("MAX(wp_posts.published_at) $sortOrder");
+        } else {
+            $query->orderBy('wp_sites.' . $sortBy, $sortOrder);
+        }
 
-        return view('wordpress.managesites')->with('wordpressSites', $wordpressSites);
+        $wordpressSites = $query->paginate(20)->appends([
+            'search' => $search,
+            'sort_by' => $sortBy,
+            'sort_order' => $sortOrder
+        ]);
+
+        return view('wordpress.managesites')->with([
+            'wordpressSites' => $wordpressSites,
+            'sortBy' => $sortBy,
+            'sortOrder' => $sortOrder
+        ]);
     }
 
     public function getWordpressPostsView($siteId)
@@ -73,7 +111,7 @@ class WordpressController extends Controller
             return redirect()->route('wordpress.sites.list')->with('error', 'WordPress Site not found');
         }
 
-        return view('wordpress.posteditor')->with('wpSite', $wpSite)->with('post', $post);
+        return view('wordpress.posteditor', compact('wpSite', 'post', 'siteId'));
     }
 
     public function getWordpressMediaView($siteId)
@@ -83,7 +121,7 @@ class WordpressController extends Controller
             return redirect()->route('wordpress.manage')->with('error', 'Wordpress Site not found');
         }
 
-        return view('wordpress.managemedia')->with('wpSite', $wpSite);
+        return view('wordpress.managemedia', compact('wpSite', 'siteId'));
     }
 
     public function createWordpressSite(Request $request)
@@ -135,32 +173,30 @@ class WordpressController extends Controller
                     Log::info("Found existing JWT token for site {$site->id}, validating...");
 
                     $validateEndpoint = $site->domain . "/wp-json/jwt-auth/v1/token/validate";
-                    $ch = curl_init();
-                    curl_setopt($ch, CURLOPT_URL, $validateEndpoint);
-                    curl_setopt($ch, CURLOPT_POST, 1);
-                    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-                    curl_setopt($ch, CURLOPT_TIMEOUT, 30);
-                    curl_setopt($ch, CURLOPT_HTTPHEADER, [
-                        'Authorization: Bearer ' . $site->jwt_token,
-                        'Content-Type: application/json'
-                    ]);
 
-                    $validateResponse = curl_exec($ch);
-                    $validateHttpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-                    curl_close($ch);
+                    $validateResponse = Http::timeout(30)
+                        ->withHeaders([
+                            'Authorization' => 'Bearer ' . $site->jwt_token,
+                            'Content-Type' => 'application/json'
+                        ])
+                        ->post($validateEndpoint);
 
-                    $validateResult = json_decode($validateResponse, true);
+                    if ($validateResponse->successful()) {
+                        $validateResult = $validateResponse->json();
 
-                    if ($validateHttpCode === 200 && isset($validateResult['code']) && $validateResult['code'] === 'jwt_auth_valid_token') {
-                        Log::info("Existing JWT token is valid for site {$site->id}");
-                        $jwtToken = $site->jwt_token;
+                        if (isset($validateResult['code']) && $validateResult['code'] === 'jwt_auth_valid_token') {
+                            Log::info("Existing JWT token is valid for site {$site->id}");
+                            $jwtToken = $site->jwt_token;
 
-                        $site->status = 'active';
-                        $site->last_connected_at = now();
-                        $site->connection_error = null;
-                        $site->save();
+                            $site->status = 'active';
+                            $site->last_connected_at = now();
+                            $site->connection_error = null;
+                            $site->save();
 
-                        return true;
+                            return true;
+                        } else {
+                            Log::info("Existing JWT token is invalid for site {$site->id}, requesting new token...");
+                        }
                     } else {
                         Log::info("Existing JWT token is invalid for site {$site->id}, requesting new token...");
                     }
@@ -168,36 +204,25 @@ class WordpressController extends Controller
             }
 
             $tokenEndpoint = $site->domain . "/wp-json/jwt-auth/v1/token";
-            $params = [
-                'username' => $site->username,
-                'password' => $site->password
-            ];
 
-            $ch = curl_init();
-            curl_setopt($ch, CURLOPT_URL, $tokenEndpoint);
-            curl_setopt($ch, CURLOPT_POST, 1);
-            curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($params));
-            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-            curl_setopt($ch, CURLOPT_TIMEOUT, 30);
-            curl_setopt($ch, CURLOPT_HTTPHEADER, [
-                'Content-Type: application/x-www-form-urlencoded'
-            ]);
+            $response = Http::timeout(30)
+                ->asForm()
+                ->post($tokenEndpoint, [
+                    'username' => $site->username,
+                    'password' => $site->password
+                ]);
 
-            $response = curl_exec($ch);
-            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-            $curlError = curl_error($ch);
-            curl_close($ch);
-
-            if ($response === false || !empty($curlError)) {
-                Log::error("WordPress connection failed for site {$site->id}: " . $curlError);
-                $this->updateSiteStatus($site, 'inactive', 'Connection failed: ' . $curlError);
+            if ($response->failed()) {
+                $errorMessage = $response->json('message') ?? 'Connection failed';
+                Log::error("WordPress connection failed for site {$site->id}: " . $errorMessage);
+                $this->updateSiteStatus($site, 'inactive', 'Connection failed: ' . $errorMessage);
                 return false;
             }
 
-            $tokenResponse = json_decode($response, true);
+            $tokenResponse = $response->json();
 
-            if ($httpCode !== 200 || !isset($tokenResponse['token'])) {
-                $errorMessage = isset($tokenResponse['message']) ? $tokenResponse['message'] : 'Invalid credentials or JWT plugin not configured';
+            if (!isset($tokenResponse['token'])) {
+                $errorMessage = $tokenResponse['message'] ?? 'Invalid credentials or JWT plugin not configured';
                 Log::error("WordPress token failed for site {$site->id}: " . $errorMessage);
                 $this->updateSiteStatus($site, 'inactive', $errorMessage);
                 return false;
@@ -207,30 +232,22 @@ class WordpressController extends Controller
 
             $validateEndpoint = $site->domain . "/wp-json/jwt-auth/v1/token/validate";
 
-            $ch = curl_init();
-            curl_setopt($ch, CURLOPT_URL, $validateEndpoint);
-            curl_setopt($ch, CURLOPT_POST, 1);
-            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-            curl_setopt($ch, CURLOPT_TIMEOUT, 30);
-            curl_setopt($ch, CURLOPT_HTTPHEADER, [
-                'Authorization: Bearer ' . $jwtToken,
-                'Content-Type: application/json'
-            ]);
+            $validateResponse = Http::timeout(30)
+                ->withHeaders([
+                    'Authorization' => 'Bearer ' . $jwtToken,
+                    'Content-Type' => 'application/json'
+                ])
+                ->post($validateEndpoint);
 
-            $validateResponse = curl_exec($ch);
-            $validateHttpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-            $validateCurlError = curl_error($ch);
-            curl_close($ch);
-
-            if ($validateResponse === false || !empty($validateCurlError)) {
-                Log::error("WordPress token validation failed for site {$site->id}: " . $validateCurlError);
+            if ($validateResponse->failed()) {
+                Log::error("WordPress token validation failed for site {$site->id}");
                 $this->updateSiteStatus($site, 'inactive', 'Token validation failed');
                 return false;
             }
 
-            $validateResult = json_decode($validateResponse, true);
+            $validateResult = $validateResponse->json();
 
-            if ($validateHttpCode !== 200 || !isset($validateResult['code']) || $validateResult['code'] !== 'jwt_auth_valid_token') {
+            if (!isset($validateResult['code']) || $validateResult['code'] !== 'jwt_auth_valid_token') {
                 Log::error("WordPress token invalid for site {$site->id}: " . json_encode($validateResult));
                 $this->updateSiteStatus($site, 'inactive', 'Invalid token');
                 return false;
@@ -238,21 +255,15 @@ class WordpressController extends Controller
 
             $testEndpoint = $site->domain . $site->rest_path . "users/me";
 
-            $ch = curl_init();
-            curl_setopt($ch, CURLOPT_URL, $testEndpoint);
-            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-            curl_setopt($ch, CURLOPT_TIMEOUT, 30);
-            curl_setopt($ch, CURLOPT_HTTPHEADER, [
-                'Authorization: Bearer ' . $jwtToken,
-                'Content-Type: application/json'
-            ]);
+            $testResponse = Http::timeout(30)
+                ->withHeaders([
+                    'Authorization' => 'Bearer ' . $jwtToken,
+                    'Content-Type' => 'application/json'
+                ])
+                ->get($testEndpoint);
 
-            $testResponse = curl_exec($ch);
-            $testHttpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-            curl_close($ch);
-
-            if ($testHttpCode !== 200) {
-                Log::error("WordPress API test failed for site {$site->id}: HTTP {$testHttpCode}");
+            if ($testResponse->failed()) {
+                Log::error("WordPress API test failed for site {$site->id}: HTTP {$testResponse->status()}");
                 $this->updateSiteStatus($site, 'inactive', 'API access failed');
                 return false;
             }
@@ -409,6 +420,19 @@ class WordpressController extends Controller
 
             $status = $request->input('status');
             $search = $request->input('search');
+            $sortBy = $request->input('sort_by', 'published_at'); // Default sort by published_at
+            $sortOrder = $request->input('sort_order', 'desc'); // Default desc (newest first)
+
+            // Validate sort column
+            $allowedSorts = ['id', 'title', 'status', 'wp_status', 'published_at', 'updated_at', 'created_at'];
+            if (!in_array($sortBy, $allowedSorts)) {
+                $sortBy = 'published_at';
+            }
+
+            // Validate sort order
+            if (!in_array(strtolower($sortOrder), ['asc', 'desc'])) {
+                $sortOrder = 'desc';
+            }
 
             $query = WpPost::where('wp_site_id', $siteId)
                 ->with(['user', 'featuredImage']);
@@ -424,7 +448,19 @@ class WordpressController extends Controller
                 });
             }
 
-            $posts = $query->orderBy('updated_at', 'desc')->paginate(20);
+            // Apply sorting with NULL values last
+            if ($sortBy === 'published_at') {
+                $query->orderByRaw("published_at IS NULL, published_at $sortOrder");
+            } else {
+                $query->orderBy($sortBy, $sortOrder);
+            }
+
+            $posts = $query->paginate(20)->appends([
+                'status' => $status,
+                'search' => $search,
+                'sort_by' => $sortBy,
+                'sort_order' => $sortOrder
+            ]);
 
             return response()->json(['success' => true, 'data' => $posts]);
         } catch (\Exception $e) {

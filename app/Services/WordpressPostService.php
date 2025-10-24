@@ -10,6 +10,7 @@ use App\Models\WpTag;
 use App\Models\WpPostHistory;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Http;
 use Carbon\Carbon;
 
 class WordpressPostService
@@ -36,27 +37,16 @@ class WordpressPostService
     {
         try {
             $tokenEndpoint = $site->domain . "/wp-json/jwt-auth/v1/token";
-            $params = [
-                'username' => $site->username,
-                'password' => $site->password
-            ];
 
-            $ch = curl_init();
-            curl_setopt($ch, CURLOPT_URL, $tokenEndpoint);
-            curl_setopt($ch, CURLOPT_POST, 1);
-            curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($params));
-            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-            curl_setopt($ch, CURLOPT_TIMEOUT, 30);
-            curl_setopt($ch, CURLOPT_HTTPHEADER, [
-                'Content-Type: application/x-www-form-urlencoded'
-            ]);
+            $response = Http::timeout(30)
+                ->asForm()
+                ->post($tokenEndpoint, [
+                    'username' => $site->username,
+                    'password' => $site->password
+                ]);
 
-            $response = curl_exec($ch);
-            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-            curl_close($ch);
-
-            if ($httpCode === 200) {
-                $tokenResponse = json_decode($response, true);
+            if ($response->successful()) {
+                $tokenResponse = $response->json();
                 if (isset($tokenResponse['token'])) {
                     $site->jwt_token = $tokenResponse['token'];
                     $site->jwt_expires_at = now()->addHours(6);
@@ -97,24 +87,15 @@ class WordpressPostService
 
             $endpoint = $site->domain . $site->rest_path . "media";
 
-            $ch = curl_init();
-            $fileData = new \CURLFile($filePath, $media->mime_type, $media->original_filename);
+            $response = Http::timeout(60)
+                ->withHeaders([
+                    'Authorization' => 'Bearer ' . $token,
+                ])
+                ->attach('file', file_get_contents($filePath), $media->original_filename)
+                ->post($endpoint);
 
-            curl_setopt($ch, CURLOPT_URL, $endpoint);
-            curl_setopt($ch, CURLOPT_POST, 1);
-            curl_setopt($ch, CURLOPT_POSTFIELDS, ['file' => $fileData]);
-            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-            curl_setopt($ch, CURLOPT_TIMEOUT, 60);
-            curl_setopt($ch, CURLOPT_HTTPHEADER, [
-                'Authorization: Bearer ' . $token,
-            ]);
-
-            $response = curl_exec($ch);
-            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-            curl_close($ch);
-
-            if ($httpCode === 201) {
-                $mediaResponse = json_decode($response, true);
+            if ($response->status() === 201) {
+                $mediaResponse = $response->json();
                 $media->wp_media_id = $mediaResponse['id'];
                 $media->wp_url = $mediaResponse['source_url'];
                 $media->upload_status = 'uploaded';
@@ -124,11 +105,11 @@ class WordpressPostService
                 Log::info("Media uploaded successfully to site {$site->id}, WP Media ID: {$mediaResponse['id']}");
                 return true;
             } else {
-                $errorResponse = json_decode($response, true);
-                $errorMessage = isset($errorResponse['message']) ? $errorResponse['message'] : 'Unknown error';
+                $errorResponse = $response->json();
+                $errorMessage = $errorResponse['message'] ?? 'Unknown error';
 
                 $media->upload_status = 'failed';
-                $media->error_message = "Upload failed (HTTP {$httpCode}): {$errorMessage}";
+                $media->error_message = "Upload failed (HTTP {$response->status()}): {$errorMessage}";
                 $media->save();
 
                 Log::error("Media upload failed for site {$site->id}: {$errorMessage}");
@@ -157,20 +138,14 @@ class WordpressPostService
 
             $endpoint = $site->domain . $site->rest_path . "categories?per_page=100";
 
-            $ch = curl_init();
-            curl_setopt($ch, CURLOPT_URL, $endpoint);
-            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-            curl_setopt($ch, CURLOPT_TIMEOUT, 30);
-            curl_setopt($ch, CURLOPT_HTTPHEADER, [
-                'Authorization: Bearer ' . $token,
-            ]);
+            $response = Http::timeout(30)
+                ->withHeaders([
+                    'Authorization' => 'Bearer ' . $token,
+                ])
+                ->get($endpoint);
 
-            $response = curl_exec($ch);
-            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-            curl_close($ch);
-
-            if ($httpCode === 200) {
-                $categories = json_decode($response, true);
+            if ($response->successful()) {
+                $categories = $response->json();
                 $syncedCount = 0;
 
                 foreach ($categories as $category) {
@@ -193,8 +168,8 @@ class WordpressPostService
                 Log::info("Synced {$syncedCount} categories for site {$site->id}");
                 return ['success' => true, 'count' => $syncedCount];
             } else {
-                Log::error("Failed to sync categories for site {$site->id}, HTTP {$httpCode}");
-                return ['success' => false, 'message' => "Failed to fetch categories (HTTP {$httpCode})"];
+                Log::error("Failed to sync categories for site {$site->id}, HTTP {$response->status()}");
+                return ['success' => false, 'message' => "Failed to fetch categories (HTTP {$response->status()})"];
             }
         } catch (\Exception $e) {
             Log::error("Exception syncing categories for site {$site->id}: " . $e->getMessage());
@@ -215,20 +190,14 @@ class WordpressPostService
 
             $endpoint = $site->domain . $site->rest_path . "tags?per_page=100";
 
-            $ch = curl_init();
-            curl_setopt($ch, CURLOPT_URL, $endpoint);
-            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-            curl_setopt($ch, CURLOPT_TIMEOUT, 30);
-            curl_setopt($ch, CURLOPT_HTTPHEADER, [
-                'Authorization: Bearer ' . $token,
-            ]);
+            $response = Http::timeout(30)
+                ->withHeaders([
+                    'Authorization' => 'Bearer ' . $token,
+                ])
+                ->get($endpoint);
 
-            $response = curl_exec($ch);
-            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-            curl_close($ch);
-
-            if ($httpCode === 200) {
-                $tags = json_decode($response, true);
+            if ($response->successful()) {
+                $tags = $response->json();
                 $syncedCount = 0;
 
                 foreach ($tags as $tag) {
@@ -250,8 +219,8 @@ class WordpressPostService
                 Log::info("Synced {$syncedCount} tags for site {$site->id}");
                 return ['success' => true, 'count' => $syncedCount];
             } else {
-                Log::error("Failed to sync tags for site {$site->id}, HTTP {$httpCode}");
-                return ['success' => false, 'message' => "Failed to fetch tags (HTTP {$httpCode})"];
+                Log::error("Failed to sync tags for site {$site->id}, HTTP {$response->status()}");
+                return ['success' => false, 'message' => "Failed to fetch tags (HTTP {$response->status()})"];
             }
         } catch (\Exception $e) {
             Log::error("Exception syncing tags for site {$site->id}: " . $e->getMessage());
@@ -302,25 +271,25 @@ class WordpressPostService
             $isUpdate = !is_null($post->wp_post_id);
             $endpoint = $site->domain . $site->rest_path . "posts" . ($isUpdate ? "/{$post->wp_post_id}" : "");
 
-            $ch = curl_init();
-            curl_setopt($ch, CURLOPT_URL, $endpoint);
-            curl_setopt($ch, CURLOPT_CUSTOMREQUEST, $isUpdate ? 'PUT' : 'POST');
-            curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($postData));
-            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-            curl_setopt($ch, CURLOPT_TIMEOUT, 60);
-            curl_setopt($ch, CURLOPT_HTTPHEADER, [
-                'Authorization: Bearer ' . $token,
-                'Content-Type: application/json',
-            ]);
+            $httpClient = Http::timeout(60)
+                ->withHeaders([
+                    'Authorization' => 'Bearer ' . $token,
+                    'Content-Type' => 'application/json',
+                ]);
 
-            $response = curl_exec($ch);
-            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-            curl_close($ch);
+            $response = $isUpdate
+                ? $httpClient->put($endpoint, $postData)
+                : $httpClient->post($endpoint, $postData);
 
-            if (in_array($httpCode, [200, 201])) {
-                $wpResponse = json_decode($response, true);
+            if (in_array($response->status(), [200, 201])) {
+                $wpResponse = $response->json();
                 $post->wp_post_id = $wpResponse['id'];
                 $post->status = $post->wp_status === 'publish' ? 'published' : 'pushed_draft';
+
+                if ($post->wp_status === 'publish' && !empty($wpResponse['date'])) {
+                    $post->published_at = \Carbon\Carbon::parse($wpResponse['date']);
+                }
+
                 $post->last_synced_at = now();
                 $post->error_message = null;
                 $post->save();
@@ -335,11 +304,11 @@ class WordpressPostService
                 Log::info("Post {$post->id} " . ($isUpdate ? 'updated' : 'created') . " in WordPress site {$site->id}, WP Post ID: {$wpResponse['id']}");
                 return true;
             } else {
-                $errorResponse = json_decode($response, true);
-                $errorMessage = isset($errorResponse['message']) ? $errorResponse['message'] : 'Unknown error';
+                $errorResponse = $response->json();
+                $errorMessage = $errorResponse['message'] ?? 'Unknown error';
 
                 $post->status = 'failed';
-                $post->error_message = "Push failed (HTTP {$httpCode}): {$errorMessage}";
+                $post->error_message = "Push failed (HTTP {$response->status()}): {$errorMessage}";
                 $post->save();
 
                 WpPostHistory::create([
@@ -386,25 +355,25 @@ class WordpressPostService
 
             $endpoint = $site->domain . $site->rest_path . "posts/{$post->wp_post_id}";
 
-            $ch = curl_init();
-            curl_setopt($ch, CURLOPT_URL, $endpoint);
-            curl_setopt($ch, CURLOPT_CUSTOMREQUEST, 'PUT');
-            curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode(['status' => 'publish']));
-            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-            curl_setopt($ch, CURLOPT_TIMEOUT, 30);
-            curl_setopt($ch, CURLOPT_HTTPHEADER, [
-                'Authorization: Bearer ' . $token,
-                'Content-Type: application/json',
-            ]);
+            $response = Http::timeout(30)
+                ->withHeaders([
+                    'Authorization' => 'Bearer ' . $token,
+                    'Content-Type' => 'application/json',
+                ])
+                ->put($endpoint, ['status' => 'publish']);
 
-            $response = curl_exec($ch);
-            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-            curl_close($ch);
-
-            if ($httpCode === 200) {
-                $wpResponse = json_decode($response, true);
+            if ($response->successful()) {
+                $wpResponse = $response->json();
                 $post->status = 'published';
                 $post->wp_status = 'publish';
+
+                // Store published timestamp from WordPress
+                if (!empty($wpResponse['date'])) {
+                    $post->published_at = \Carbon\Carbon::parse($wpResponse['date']);
+                } else {
+                    $post->published_at = now();
+                }
+
                 $post->last_synced_at = now();
                 $post->save();
 
@@ -418,11 +387,11 @@ class WordpressPostService
                 Log::info("Post {$post->id} published on WordPress site {$site->id}");
                 return ['success' => true, 'link' => $wpResponse['link'] ?? null];
             } else {
-                $errorResponse = json_decode($response, true);
-                $errorMessage = isset($errorResponse['message']) ? $errorResponse['message'] : 'Unknown error';
+                $errorResponse = $response->json();
+                $errorMessage = $errorResponse['message'] ?? 'Unknown error';
 
                 Log::error("Failed to publish post {$post->id} on WordPress site {$site->id}: {$errorMessage}");
-                return ['success' => false, 'message' => "Publish failed (HTTP {$httpCode}): {$errorMessage}"];
+                return ['success' => false, 'message' => "Publish failed (HTTP {$response->status()}): {$errorMessage}"];
             }
         } catch (\Exception $e) {
             Log::error("Exception publishing post {$post->id} on WordPress site {$site->id}: " . $e->getMessage());
@@ -447,28 +416,21 @@ class WordpressPostService
 
             $endpoint = $site->domain . $site->rest_path . "posts/{$post->wp_post_id}?force=true";
 
-            $ch = curl_init();
-            curl_setopt($ch, CURLOPT_URL, $endpoint);
-            curl_setopt($ch, CURLOPT_CUSTOMREQUEST, 'DELETE');
-            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-            curl_setopt($ch, CURLOPT_TIMEOUT, 30);
-            curl_setopt($ch, CURLOPT_HTTPHEADER, [
-                'Authorization: Bearer ' . $token,
-            ]);
+            $response = Http::timeout(30)
+                ->withHeaders([
+                    'Authorization' => 'Bearer ' . $token,
+                ])
+                ->delete($endpoint);
 
-            $response = curl_exec($ch);
-            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-            curl_close($ch);
-
-            if ($httpCode === 200) {
+            if ($response->successful()) {
                 Log::info("Post {$post->id} deleted from WordPress site {$site->id}");
                 return ['success' => true];
             } else {
-                $errorResponse = json_decode($response, true);
-                $errorMessage = isset($errorResponse['message']) ? $errorResponse['message'] : 'Unknown error';
+                $errorResponse = $response->json();
+                $errorMessage = $errorResponse['message'] ?? 'Unknown error';
 
                 Log::error("Failed to delete post {$post->id} from WordPress site {$site->id}: {$errorMessage}");
-                return ['success' => false, 'message' => "Delete failed (HTTP {$httpCode}): {$errorMessage}"];
+                return ['success' => false, 'message' => "Delete failed (HTTP {$response->status()}): {$errorMessage}"];
             }
         } catch (\Exception $e) {
             Log::error("Exception deleting post {$post->id} from WordPress site {$site->id}: " . $e->getMessage());
@@ -501,23 +463,15 @@ class WordpressPostService
 
             $endpoint = $site->domain . $site->rest_path . "categories";
 
-            $ch = curl_init();
-            curl_setopt($ch, CURLOPT_URL, $endpoint);
-            curl_setopt($ch, CURLOPT_POST, 1);
-            curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode(['name' => $categoryName]));
-            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-            curl_setopt($ch, CURLOPT_TIMEOUT, 30);
-            curl_setopt($ch, CURLOPT_HTTPHEADER, [
-                'Authorization: Bearer ' . $token,
-                'Content-Type: application/json',
-            ]);
+            $response = Http::timeout(30)
+                ->withHeaders([
+                    'Authorization' => 'Bearer ' . $token,
+                    'Content-Type' => 'application/json',
+                ])
+                ->post($endpoint, ['name' => $categoryName]);
 
-            $response = curl_exec($ch);
-            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-            curl_close($ch);
-
-            if ($httpCode === 201) {
-                $categoryResponse = json_decode($response, true);
+            if ($response->status() === 201) {
+                $categoryResponse = $response->json();
 
                 WpCategory::create([
                     'wp_site_id' => $site->id,
@@ -529,8 +483,8 @@ class WordpressPostService
 
                 return ['success' => true, 'category' => $categoryResponse];
             } else {
-                $errorResponse = json_decode($response, true);
-                $errorMessage = isset($errorResponse['message']) ? $errorResponse['message'] : 'Unknown error';
+                $errorResponse = $response->json();
+                $errorMessage = $errorResponse['message'] ?? 'Unknown error';
                 return ['success' => false, 'message' => $errorMessage];
             }
         } catch (\Exception $e) {
@@ -551,23 +505,15 @@ class WordpressPostService
 
             $endpoint = $site->domain . $site->rest_path . "tags";
 
-            $ch = curl_init();
-            curl_setopt($ch, CURLOPT_URL, $endpoint);
-            curl_setopt($ch, CURLOPT_POST, 1);
-            curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode(['name' => $tagName]));
-            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-            curl_setopt($ch, CURLOPT_TIMEOUT, 30);
-            curl_setopt($ch, CURLOPT_HTTPHEADER, [
-                'Authorization: Bearer ' . $token,
-                'Content-Type: application/json',
-            ]);
+            $response = Http::timeout(30)
+                ->withHeaders([
+                    'Authorization' => 'Bearer ' . $token,
+                    'Content-Type' => 'application/json',
+                ])
+                ->post($endpoint, ['name' => $tagName]);
 
-            $response = curl_exec($ch);
-            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-            curl_close($ch);
-
-            if ($httpCode === 201) {
-                $tagResponse = json_decode($response, true);
+            if ($response->status() === 201) {
+                $tagResponse = $response->json();
 
                 WpTag::create([
                     'wp_site_id' => $site->id,
@@ -579,8 +525,8 @@ class WordpressPostService
 
                 return ['success' => true, 'tag' => $tagResponse];
             } else {
-                $errorResponse = json_decode($response, true);
-                $errorMessage = isset($errorResponse['message']) ? $errorResponse['message'] : 'Unknown error';
+                $errorResponse = $response->json();
+                $errorMessage = $errorResponse['message'] ?? 'Unknown error';
                 return ['success' => false, 'message' => $errorMessage];
             }
         } catch (\Exception $e) {
@@ -662,20 +608,14 @@ class WordpressPostService
 
             $endpoint = $site->domain . $site->rest_path . "media?per_page=100";
 
-            $ch = curl_init();
-            curl_setopt($ch, CURLOPT_URL, $endpoint);
-            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-            curl_setopt($ch, CURLOPT_TIMEOUT, 30);
-            curl_setopt($ch, CURLOPT_HTTPHEADER, [
-                'Authorization: Bearer ' . $token,
-            ]);
+            $response = Http::timeout(30)
+                ->withHeaders([
+                    'Authorization' => 'Bearer ' . $token,
+                ])
+                ->get($endpoint);
 
-            $response = curl_exec($ch);
-            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-            curl_close($ch);
-
-            if ($httpCode === 200) {
-                $mediaItems = json_decode($response, true);
+            if ($response->successful()) {
+                $mediaItems = $response->json();
                 $syncedCount = 0;
 
                 foreach ($mediaItems as $media) {
@@ -702,8 +642,8 @@ class WordpressPostService
                 Log::info("Synced {$syncedCount} media files for site {$site->id}");
                 return ['success' => true, 'count' => $syncedCount];
             } else {
-                Log::error("Failed to sync media for site {$site->id}, HTTP {$httpCode}");
-                return ['success' => false, 'message' => "Failed to fetch media (HTTP {$httpCode})"];
+                Log::error("Failed to sync media for site {$site->id}, HTTP {$response->status()}");
+                return ['success' => false, 'message' => "Failed to fetch media (HTTP {$response->status()})"];
             }
         } catch (\Exception $e) {
             Log::error("Exception syncing media for site {$site->id}: " . $e->getMessage());
@@ -724,20 +664,14 @@ class WordpressPostService
 
             $endpoint = $site->domain . $site->rest_path . "posts?per_page=100";
 
-            $ch = curl_init();
-            curl_setopt($ch, CURLOPT_URL, $endpoint);
-            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-            curl_setopt($ch, CURLOPT_TIMEOUT, 30);
-            curl_setopt($ch, CURLOPT_HTTPHEADER, [
-                'Authorization: Bearer ' . $token,
-            ]);
+            $response = Http::timeout(30)
+                ->withHeaders([
+                    'Authorization' => 'Bearer ' . $token,
+                ])
+                ->get($endpoint);
 
-            $response = curl_exec($ch);
-            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-            curl_close($ch);
-
-            if ($httpCode === 200) {
-                $posts = json_decode($response, true);
+            if ($response->successful()) {
+                $posts = $response->json();
                 $syncedCount = 0;
 
                 foreach ($posts as $post) {
@@ -760,6 +694,12 @@ class WordpressPostService
                         $existingPost->wp_status = $post['status'];
                         $existingPost->wp_author_id = $post['author'];
                         $existingPost->featured_image_id = $featuredImageId;
+
+                        // Store published timestamp if post is published
+                        if ($post['status'] === 'publish' && !empty($post['date'])) {
+                            $existingPost->published_at = \Carbon\Carbon::parse($post['date']);
+                        }
+
                         $existingPost->last_synced_at = now();
                         $existingPost->save();
                     } else {
@@ -776,6 +716,12 @@ class WordpressPostService
                         $newPost->categories = $post['categories'] ?? [];
                         $newPost->tags = $post['tags'] ?? [];
                         $newPost->featured_image_id = $featuredImageId;
+
+                        // Store published timestamp if post is published
+                        if ($post['status'] === 'publish' && !empty($post['date'])) {
+                            $newPost->published_at = \Carbon\Carbon::parse($post['date']);
+                        }
+
                         $newPost->last_synced_at = now();
                         $newPost->save();
                     }
@@ -785,8 +731,8 @@ class WordpressPostService
                 Log::info("Synced {$syncedCount} existing posts for site {$site->id}");
                 return ['success' => true, 'count' => $syncedCount];
             } else {
-                Log::error("Failed to sync existing posts for site {$site->id}, HTTP {$httpCode}");
-                return ['success' => false, 'message' => "Failed to fetch existing posts (HTTP {$httpCode})"];
+                Log::error("Failed to sync existing posts for site {$site->id}, HTTP {$response->status()}");
+                return ['success' => false, 'message' => "Failed to fetch existing posts (HTTP {$response->status()})"];
             }
         } catch (\Exception $e) {
             Log::error("Exception syncing existing posts for site {$site->id}: " . $e->getMessage());

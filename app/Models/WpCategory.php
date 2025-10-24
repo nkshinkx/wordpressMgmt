@@ -9,7 +9,7 @@ class WpCategory extends Model
 {
     use HasFactory;
 
-    protected $table = 'wp_categories_cache';
+    protected $table = 'wp_categories';
 
     protected $fillable = [
         'wp_site_id',

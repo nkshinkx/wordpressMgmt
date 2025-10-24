@@ -25,6 +25,7 @@ return new class extends Migration
             $table->json('categories')->nullable();
             $table->json('tags')->nullable();
             $table->unsignedBigInteger('wp_author_id')->nullable();
+            $table->timestamp('published_at')->nullable();
             $table->timestamp('scheduled_at')->nullable();
             $table->timestamp('last_synced_at')->nullable();
             $table->text('error_message')->nullable();

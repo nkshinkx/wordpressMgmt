@@ -24,6 +24,7 @@ class WpPost extends Model
         'categories',
         'tags',
         'wp_author_id',
+        'published_at',
         'scheduled_at',
         'last_synced_at',
         'error_message',
@@ -37,6 +38,7 @@ class WpPost extends Model
         'wp_author_id' => 'integer',
         'categories' => 'array',
         'tags' => 'array',
+        'published_at' => 'datetime',
         'scheduled_at' => 'datetime',
         'last_synced_at' => 'datetime',
     ];

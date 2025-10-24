@@ -76,11 +76,46 @@
                                 <table class="table table-striped table-hover">
                                     <thead class="table-light">
                                         <tr>
-                                            <th>ID</th>
-                                            <th>Site Name</th>
-                                            <th>Domain</th>
-                                            <th>Connection Status</th>
-                                            <th>Last Connected</th>
+                                            <th>
+                                                <a href="{{ url()->current() }}?search={{ $search ?? '' }}&sort_by=id&sort_order={{ ($sortBy ?? '') == 'id' && ($sortOrder ?? '') == 'asc' ? 'desc' : 'asc' }}" class="text-decoration-none text-dark">
+                                                    ID
+                                                    @if(($sortBy ?? '') == 'id')
+                                                        <i class="bx bx-{{ ($sortOrder ?? '') == 'asc' ? 'up' : 'down' }}-arrow"></i>
+                                                    @endif
+                                                </a>
+                                            </th>
+                                            <th>
+                                                <a href="{{ url()->current() }}?search={{ $search ?? '' }}&sort_by=site_name&sort_order={{ ($sortBy ?? '') == 'site_name' && ($sortOrder ?? '') == 'asc' ? 'desc' : 'asc' }}" class="text-decoration-none text-dark">
+                                                    Site Name
+                                                    @if(($sortBy ?? '') == 'site_name')
+                                                        <i class="bx bx-{{ ($sortOrder ?? '') == 'asc' ? 'up' : 'down' }}-arrow"></i>
+                                                    @endif
+                                                </a>
+                                            </th>
+                                            <th>
+                                                <a href="{{ url()->current() }}?search={{ $search ?? '' }}&sort_by=domain&sort_order={{ ($sortBy ?? '') == 'domain' && ($sortOrder ?? '') == 'asc' ? 'desc' : 'asc' }}" class="text-decoration-none text-dark">
+                                                    Domain
+                                                    @if(($sortBy ?? '') == 'domain')
+                                                        <i class="bx bx-{{ ($sortOrder ?? '') == 'asc' ? 'up' : 'down' }}-arrow"></i>
+                                                    @endif
+                                                </a>
+                                            </th>
+                                            <th>
+                                                <a href="{{ url()->current() }}?search={{ $search ?? '' }}&sort_by=status&sort_order={{ ($sortBy ?? '') == 'status' && ($sortOrder ?? '') == 'asc' ? 'desc' : 'asc' }}" class="text-decoration-none text-dark">
+                                                    Connection Status
+                                                    @if(($sortBy ?? '') == 'status')
+                                                        <i class="bx bx-{{ ($sortOrder ?? '') == 'asc' ? 'up' : 'down' }}-arrow"></i>
+                                                    @endif
+                                                </a>
+                                            </th>
+                                            <th>
+                                                <a href="{{ url()->current() }}?search={{ $search ?? '' }}&sort_by=last_published_at&sort_order={{ ($sortBy ?? '') == 'last_published_at' && ($sortOrder ?? '') == 'asc' ? 'desc' : 'asc' }}" class="text-decoration-none text-dark">
+                                                    Last Published At
+                                                    @if(($sortBy ?? 'last_published_at') == 'last_published_at')
+                                                        <i class="bx bx-{{ ($sortOrder ?? 'desc') == 'asc' ? 'up' : 'down' }}-arrow"></i>
+                                                    @endif
+                                                </a>
+                                            </th>
                                             <th>Actions</th>
                                         </tr>
                                     </thead>
@@ -104,7 +139,7 @@
                                                     @endif
                                                 </td>
                                                 <td>
-                                                    {{ $site->last_connected_at ? \Carbon\Carbon::parse($site->last_connected_at)->format('Y-m-d H:i') : 'Never' }}
+                                                    {{ $site->last_published_at ? \Carbon\Carbon::parse($site->last_published_at)->format('Y-m-d H:i') : 'Never' }}
                                                 </td>
                                                 <td>
                                                     <div class="btn-group" role="group">
@@ -326,7 +361,7 @@
             </div>
         </div>
     </div>
-    <script src="http://127.0.0.1:8000/assetsNew/js/jquery.min.js"></script>
+    <script src="{{ asset('/assetsNew/js/jquery.min.js') }}"></script>
     <script>
         $(document).ready(function() {
             // Setup CSRF token for AJAX requests
@@ -579,6 +614,15 @@
             background-color: #f8f9fa;
             font-weight: 600;
             border-bottom: 2px solid #dee2e6;
+        }
+
+        .table th a {
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .table th a:hover {
+            color: #0d6efd !important;
         }
 
         .table td {

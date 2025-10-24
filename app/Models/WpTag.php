@@ -9,7 +9,7 @@ class WpTag extends Model
 {
     use HasFactory;
 
-    protected $table = 'wp_tags_cache';
+    protected $table = 'wp_tags';
 
     protected $fillable = [
         'wp_site_id',
